@@ -1,172 +1,129 @@
-import datetime
-import random
-
-import altair as alt
 import numpy as np
 import pandas as pd
 import streamlit as st
-
-# Show app title and description.
-st.set_page_config(page_title="Support tickets", page_icon="🎫")
-st.title("🎫 Support tickets")
-st.write(
-    """
-    This app shows how you can build an internal tool in Streamlit. Here, we are 
-    implementing a support ticket workflow. The user can create a ticket, edit 
-    existing tickets, and view some statistics.
-    """
-)
-
-# Create a random Pandas dataframe with existing tickets.
-if "df" not in st.session_state:
-
-    # Set seed for reproducibility.
-    np.random.seed(42)
-
-    # Make up some fake issue descriptions.
-    issue_descriptions = [
-        "Network connectivity issues in the office",
-        "Software application crashing on startup",
-        "Printer not responding to print commands",
-        "Email server downtime",
-        "Data backup failure",
-        "Login authentication problems",
-        "Website performance degradation",
-        "Security vulnerability identified",
-        "Hardware malfunction in the server room",
-        "Employee unable to access shared files",
-        "Database connection failure",
-        "Mobile application not syncing data",
-        "VoIP phone system issues",
-        "VPN connection problems for remote employees",
-        "System updates causing compatibility issues",
-        "File server running out of storage space",
-        "Intrusion detection system alerts",
-        "Inventory management system errors",
-        "Customer data not loading in CRM",
-        "Collaboration tool not sending notifications",
-    ]
-
-    # Generate the dataframe with 100 rows/tickets.
-    data = {
-        "ID": [f"TICKET-{i}" for i in range(1100, 1000, -1)],
-        "Issue": np.random.choice(issue_descriptions, size=100),
-        "Status": np.random.choice(["Open", "In Progress", "Closed"], size=100),
-        "Priority": np.random.choice(["High", "Medium", "Low"], size=100),
-        "Date Submitted": [
-            datetime.date(2023, 6, 1) + datetime.timedelta(days=random.randint(0, 182))
-            for _ in range(100)
-        ],
-    }
-    df = pd.DataFrame(data)
-
-    # Save the dataframe in session state (a dictionary-like object that persists across
-    # page runs). This ensures our data is persisted when the app updates.
-    st.session_state.df = df
-
-
-# Show a section to add a new ticket.
-st.header("Add a ticket")
-
-# We're adding tickets via an `st.form` and some input widgets. If widgets are used
-# in a form, the app will only rerun once the submit button is pressed.
-with st.form("add_ticket_form"):
-    issue = st.text_area("Describe the issue")
-    priority = st.selectbox("Priority", ["High", "Medium", "Low"])
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.linear_model import ElasticNet
+from scipy.optimize import minimize_scalar
+ 
+# Show app title and description
+st.set_page_config(page_title="Optimal Price", page_icon="")
+st.title("Optimal Price for Luxury Fashion Brands")
+ 
+# Define form for user inputs
+with st.form("input_form"):
+    brand_name = st.selectbox("Select a Brand", ['Gucci', 'Burberry', 'Prada', 'Hermes', 'Ralph Lauren'])
+    cost = st.number_input("Production Cost", min_value=0.0, step=0.01)
+    competitor_price = st.number_input("Competitor Price", min_value=0.0, step=0.01)
     submitted = st.form_submit_button("Submit")
-
+ 
+# Generate random data
+np.random.seed(42)
+data = {
+    'BrandName': np.random.choice(['Gucci', 'Burberry', 'Prada', 'Hermes', 'Ralph Lauren'], 100),
+    'ItemNumber': np.random.randint(1, 11, 100),
+    'ProductionCost': np.random.uniform(50, 20000, 100),
+    'Price': np.random.uniform(100, 50000, 100),
+    'CompetitorPrice': np.random.uniform(100, 50000, 100),
+    'Demand': np.random.poisson(lam=10, size=100)
+}
+df = pd.DataFrame(data)
+ 
+# Define features and target
+categorical_features = ['BrandName', 'ItemNumber']
+numeric_features = ['ProductionCost', 'Price', 'CompetitorPrice']
+target_feature = 'Demand'
+ 
+X = df[categorical_features + numeric_features]
+y = df[target_feature]
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+ 
+# Preprocessing
+numeric_transformer = StandardScaler()
+categorical_transformer = OneHotEncoder(categories='auto', drop='first', sparse_output=False)
+ 
+# Fit transformers on training data
+X_train_numeric = numeric_transformer.fit_transform(X_train[numeric_features])
+X_train_categorical = categorical_transformer.fit_transform(X_train[categorical_features])
+ 
+X_train_transformed = np.hstack((X_train_numeric, X_train_categorical))
+X_test_numeric = numeric_transformer.transform(X_test[numeric_features])
+X_test_categorical = categorical_transformer.transform(X_test[categorical_features])
+X_test_transformed = np.hstack((X_test_numeric, X_test_categorical))
+ 
+# Train ElasticNet model
+model = ElasticNet()
+param_grid = {
+    'alpha': [0.001, 0.01, 0.1, 1.0, 10.0, 50.0, 100.0],
+    'l1_ratio': [0.0, 0.1, 0.3, 0.5, 0.7, 0.9, 1.0]
+}
+grid_search = GridSearchCV(model, param_grid=param_grid, cv=5)
+grid_search.fit(X_train_transformed, y_train)
+ 
+# Evaluate the model
+y_pred = grid_search.predict(X_test_transformed)
+X_test = X_test.reset_index(drop=True)
+ 
+# Define functions for demand and profit calculation
+def demand_function(price, competitor_price, predicted_demand):
+    sensitivity = 2
+    competitor_influence = 0.75
+    return predicted_demand - sensitivity * (price - competitor_price) * competitor_influence
+ 
+def calculate_profit(price, cost, competitor_price, predicted_demand):
+    demand = demand_function(price, competitor_price, predicted_demand)
+    profit = (price - cost) * demand
+    return profit
+ 
+def optimize_price(cost, competitor_price, predicted_demand, price_bounds=(100, 100000)):
+    def objective(price):
+        return -calculate_profit(price, cost, competitor_price, predicted_demand)
+    result = minimize_scalar(objective, bounds=price_bounds, method='bounded')
+    optimal_price = result.x
+    max_profit = -result.fun
+    return optimal_price, max_profit
+ 
+# Handle user input
 if submitted:
-    # Make a dataframe for the new ticket and append it to the dataframe in session
-    # state.
-    recent_ticket_number = int(max(st.session_state.df.ID).split("-")[1])
-    today = datetime.datetime.now().strftime("%m-%d-%Y")
-    df_new = pd.DataFrame(
-        [
-            {
-                "ID": f"TICKET-{recent_ticket_number+1}",
-                "Issue": issue,
-                "Status": "Open",
-                "Priority": priority,
-                "Date Submitted": today,
-            }
-        ]
-    )
-
-    # Show a little success message.
-    st.write("Ticket submitted! Here are the ticket details:")
-    st.dataframe(df_new, use_container_width=True, hide_index=True)
-    st.session_state.df = pd.concat([df_new, st.session_state.df], axis=0)
-
-# Show section to view and edit existing tickets in a table.
-st.header("Existing tickets")
-st.write(f"Number of tickets: `{len(st.session_state.df)}`")
-
-st.info(
-    "You can edit the tickets by double clicking on a cell. Note how the plots below "
-    "update automatically! You can also sort the table by clicking on the column headers.",
-    icon="✍️",
-)
-
-# Show the tickets dataframe with `st.data_editor`. This lets the user edit the table
-# cells. The edited data is returned as a new dataframe.
-edited_df = st.data_editor(
-    st.session_state.df,
-    use_container_width=True,
-    hide_index=True,
-    column_config={
-        "Status": st.column_config.SelectboxColumn(
-            "Status",
-            help="Ticket status",
-            options=["Open", "In Progress", "Closed"],
-            required=True,
-        ),
-        "Priority": st.column_config.SelectboxColumn(
-            "Priority",
-            help="Priority",
-            options=["High", "Medium", "Low"],
-            required=True,
-        ),
-    },
-    # Disable editing the ID and Date Submitted columns.
-    disabled=["ID", "Date Submitted"],
-)
-
-# Show some metrics and charts about the ticket.
-st.header("Statistics")
-
-# Show metrics side by side using `st.columns` and `st.metric`.
-col1, col2, col3 = st.columns(3)
-num_open_tickets = len(st.session_state.df[st.session_state.df.Status == "Open"])
-col1.metric(label="Number of open tickets", value=num_open_tickets, delta=10)
-col2.metric(label="First response time (hours)", value=5.2, delta=-1.5)
-col3.metric(label="Average resolution time (hours)", value=16, delta=2)
-
-# Show two Altair charts using `st.altair_chart`.
-st.write("")
-st.write("##### Ticket status per month")
-status_plot = (
-    alt.Chart(edited_df)
-    .mark_bar()
-    .encode(
-        x="month(Date Submitted):O",
-        y="count():Q",
-        xOffset="Status:N",
-        color="Status:N",
-    )
-    .configure_legend(
-        orient="bottom", titleFontSize=14, labelFontSize=14, titlePadding=5
-    )
-)
-st.altair_chart(status_plot, use_container_width=True, theme="streamlit")
-
-st.write("##### Current ticket priorities")
-priority_plot = (
-    alt.Chart(edited_df)
-    .mark_arc()
-    .encode(theta="count():Q", color="Priority:N")
-    .properties(height=300)
-    .configure_legend(
-        orient="bottom", titleFontSize=14, labelFontSize=14, titlePadding=5
-    )
-)
-st.altair_chart(priority_plot, use_container_width=True, theme="streamlit")
+    # Encode user input
+    user_input_categorical = pd.DataFrame([[brand_name, 1]], columns=categorical_features)
+    user_input_categorical = categorical_transformer.transform(user_input_categorical)
+   
+    user_input_numeric = pd.DataFrame([[cost, 0, competitor_price]], columns=numeric_features)
+    user_input_numeric = numeric_transformer.transform(user_input_numeric)
+   
+    user_input_transformed = np.hstack((user_input_numeric, user_input_categorical))
+   
+    # Predict demand for user input
+    user_predicted_demand = grid_search.predict(user_input_transformed)[0]
+ 
+    # Optimize price for user input
+    optimal_price, max_profit = optimize_price(cost, competitor_price, user_predicted_demand)
+   
+    # Display results
+    st.write(f'Optimal Price: {optimal_price:.2f}')
+    st.write(f'Maximum Profit: {max_profit:.2f}')
+ 
+# Collect results
+results = []
+ 
+for idx, row in X_test.iterrows():
+    production_cost = row['ProductionCost']
+    competitor_price = row['CompetitorPrice']
+    predicted_demand = y_pred[idx]
+   
+    optimal_price, max_profit = optimize_price(production_cost, competitor_price, predicted_demand)
+   
+    results.append({
+        'BrandName': row['BrandName'],
+        'ItemNumber': row['ItemNumber'],
+        'ProductionCost': production_cost,
+        'CompetitorPrice': competitor_price,
+        'PredictedDemand': predicted_demand,
+        'OptimizedPrice': optimal_price
+    })
+ 
+# Format results
+results_df = pd.DataFrame(results)
+st.subheader("Original Dataset Predictions")
+st.table(results_df)
