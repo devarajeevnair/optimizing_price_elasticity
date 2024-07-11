@@ -22,7 +22,7 @@ np.random.seed(42)
 data = {
     'BrandName': np.random.choice(['Gucci', 'Burberry', 'Prada', 'Hermes', 'Ralph Lauren'], 100),
     'ItemNumber': np.random.randint(1, 11, 100),
-    'ProductionCost': np.random.uniform(50, 5000, 100),
+    'ProductionCost': np.random.uniform(50, 9000, 100),
     'Price': np.random.uniform(100, 9000, 100),
     'CompetitorPrice': np.random.uniform(100, 9000, 100),
     'Demand': np.random.poisson(lam=10, size=100)
